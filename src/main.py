@@ -175,35 +175,30 @@ def get_recent_commands(now=None) -> list[dict]:
     return selected
 
 
+REPL_COMMANDS = {
+    "create_entity": lambda: create_entity("ru", "Chrome"),
+    "get_all_entities": get_all_entities,
+    "edit_entity": lambda: edit_entity(0, locale="en"),
+    "create_command": lambda: create_command(0, argument="ping"),
+    "get_all_commands": get_all_commands,
+    "edit_command": lambda: edit_command(0, status="done"),
+    "create_result": lambda: create_result(0, response="pong"),
+    "get_all_results": get_all_results,
+    "edit_result": lambda: edit_result(0, status="ok"),
+    "get_recent_commands": get_recent_commands,
+}
+
+
 def repl():
     while True:
         try:
             choice = input()
-            match choice:
-                case "create_entity":
-                    print(create_entity("ru", "Chrome"))
-                case "get_all_entities":
-                    print(get_all_entities())
-                case "edit_entity":
-                    print(edit_entity(0, locale="en"))
-                case "create_command":
-                    print(create_command(0, argument="ping"))
-                case "get_all_commands":
-                    print(get_all_commands())
-                case "edit_command":
-                    print(edit_command(0, status="done"))
-                case "create_result":
-                    print(create_result(0, response="pong"))
-                case "get_all_results":
-                    print(get_all_results())
-                case "edit_result":
-                    print(edit_result(0, status="ok"))
-                case "get_recent_commands":
-                    print(get_recent_commands())
-                case "exit":
-                    return
-                case _:
-                    raise ValueError("Неизвестная команда")
+            if choice == "exit":
+                return
+            command = REPL_COMMANDS.get(choice)
+            if command is None:
+                raise ValueError("Неизвестная команда")
+            print(command())
         except (TypeError, ValueError) as error:
             print(error)
 
