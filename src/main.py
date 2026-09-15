@@ -261,7 +261,7 @@ class RequestHandler(socketserver.BaseRequestHandler):
             response = {"error": str(error)}
         response_code = code if code < len(FUNCTIONS) else 255
         self.request.sendall(encode_message(response_code, response, 1))
-        print(json.dumps(response, ensure_ascii=False), flush=True)
+        print(json.dumps(response), flush=True)
 
 
 class Server(socketserver.ThreadingTCPServer):

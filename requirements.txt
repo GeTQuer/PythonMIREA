@@ -1,0 +1,4 @@
+coverage>=7.6,<8
+hypothesis==6.112.2
+pycodestyle==2.12.1
+
