@@ -1,4 +1,7 @@
 import datetime
+import json
+import socket
+import socketserver
 import sys
 
 
@@ -205,5 +208,199 @@ def repl():
             print(error)
 
 
-if __name__ == "__main__" and sys.argv[-1] == "repl":
-    repl()
+FUNCTIONS = (
+    create_entity,
+    get_all_entities,
+    edit_entity,
+    create_command,
+    get_all_commands,
+    edit_command,
+    create_result,
+    get_all_results,
+    edit_result,
+    get_recent_commands,
+)
+
+
+def receive_exact(connection, size):
+    data = b""
+    while len(data) < size:
+        part = connection.recv(size - len(data))
+        if not part:
+            raise ValueError("Соединение закрыто")
+        data += part
+    return data
+
+
+def encode_message(code, body, code_size):
+    data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    return (
+        code.to_bytes(code_size, "little")
+        + len(data).to_bytes(5, "little")
+        + data
+    )
+
+
+def receive_message(connection, code_size):
+    code = int.from_bytes(receive_exact(connection, code_size), "little")
+    body_size = int.from_bytes(receive_exact(connection, 5), "little")
+    body = receive_exact(connection, body_size).decode("utf-8")
+    return code, json.loads(body)
+
+
+class RequestHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        code = 255
+        try:
+            code, arguments = receive_message(self.request, 2)
+            if code >= len(FUNCTIONS):
+                raise ValueError("Неизвестный код операции")
+            result = FUNCTIONS[code](**arguments)
+            response = {"result": result}
+        except (TypeError, ValueError) as error:
+            response = {"error": str(error)}
+        response_code = code if code < len(FUNCTIONS) else 255
+        self.request.sendall(encode_message(response_code, response, 1))
+        print(json.dumps(response, ensure_ascii=False), flush=True)
+
+
+class Server(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+
+def run_server(host="127.0.0.1", port=8080):
+    with Server((host, port), RequestHandler) as server:
+        print(f"RPC server started on {host}:{port}")
+        server.serve_forever()
+
+
+class RpcClient:
+    def __init__(self, host="127.0.0.1", port=8080):
+        self.host = host
+        self.port = port
+
+    def call(self, code, arguments):
+        request = encode_message(code, arguments, 2)
+        with socket.create_connection((self.host, self.port)) as connection:
+            connection.sendall(request)
+            response_code, response = receive_message(connection, 1)
+        if response_code != code:
+            raise ValueError("Неверный код операции в ответе")
+        if "error" in response:
+            raise ValueError(response["error"])
+        return response["result"]
+
+    def create_entity(self, locale=None, user_agent=None, created=None):
+        return self.call(0, {
+            "locale": locale,
+            "user_agent": user_agent,
+            "created": created,
+        })
+
+    def get_all_entities(self):
+        return self.call(1, {})
+
+    def edit_entity(self, identifier, locale=None, user_agent=None):
+        return self.call(2, {
+            "identifier": identifier,
+            "locale": locale,
+            "user_agent": user_agent,
+        })
+
+    def create_command(
+        self,
+        entity,
+        argument=None,
+        tags=None,
+        status=None,
+        started=None,
+        created=None,
+    ):
+        return self.call(3, {
+            "entity": entity,
+            "argument": argument,
+            "tags": tags,
+            "status": status,
+            "started": started,
+            "created": created,
+        })
+
+    def get_all_commands(self):
+        return self.call(4, {})
+
+    def edit_command(
+        self,
+        identifier,
+        argument=None,
+        entity=None,
+        tags=None,
+        status=None,
+        started=None,
+    ):
+        return self.call(5, {
+            "identifier": identifier,
+            "argument": argument,
+            "entity": entity,
+            "tags": tags,
+            "status": status,
+            "started": started,
+        })
+
+    def create_result(
+        self,
+        command,
+        response=None,
+        status=None,
+        error=None,
+        cache_hit=None,
+        duration=None,
+    ):
+        return self.call(6, {
+            "command": command,
+            "response": response,
+            "status": status,
+            "error": error,
+            "cache_hit": cache_hit,
+            "duration": duration,
+        })
+
+    def get_all_results(self):
+        return self.call(7, {})
+
+    def edit_result(self, identifier, **fields):
+        return self.call(8, {"identifier": identifier, **fields})
+
+    def get_recent_commands(self, now=None):
+        return self.call(9, {"now": now})
+
+
+def demonstrate(client):
+    entity = client.create_entity("ru", "Chrome")
+    print(client.get_all_entities())
+    print(client.edit_entity(entity["identifier"], locale="en"))
+    command = client.create_command(entity["identifier"], argument="ping")
+    print(client.get_all_commands())
+    print(client.edit_command(command["identifier"], status="done"))
+    result = client.create_result(command["identifier"], response="pong")
+    print(client.get_all_results())
+    print(client.edit_result(result["identifier"], status="ok"))
+    print(client.get_recent_commands())
+
+
+def run_demo():
+    demonstrate(RpcClient())
+
+
+def main():
+    mode = sys.argv[1] if len(sys.argv) > 1 else "repl"
+    if mode == "repl":
+        repl()
+    elif mode == "server":
+        run_server()
+    elif mode == "demo":
+        run_demo()
+
+
+if __name__ == "__main__":
+    main()
