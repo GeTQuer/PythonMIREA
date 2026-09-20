@@ -27,6 +27,7 @@ class RpcStateMachine(RuleBasedStateMachine):
         self.entities = []
         self.commands = []
         self.results = []
+        self.recent_rows = []
         self.server = main.Server(("127.0.0.1", 0), main.RequestHandler)
         self.thread = threading.Thread(
             target=self.server.serve_forever,
@@ -41,35 +42,23 @@ class RpcStateMachine(RuleBasedStateMachine):
         self.server.server_close()
         self.thread.join()
 
-    def expected_join(self, now):
-        selected = []
-        for entity in self.entities:
-            if entity["created"] < now - main.RECENT_SECONDS:
-                continue
-            matches = [
-                command for command in self.commands
-                if command["entity"] == entity["identifier"]
-            ]
-            arguments = [item["argument"] for item in matches] or [None]
-            for argument in arguments:
-                selected.append({
-                    "argument": argument,
-                    "locale": entity["locale"],
-                    "user_agent": entity["user_agent"],
-                })
-        return selected
-
     def check_entity(self, locale, user_agent):
         entity = self.client.create_entity(locale, user_agent)
         self.entities.append(entity)
+        self.recent_rows.append({
+            "argument": None,
+            "locale": locale,
+            "user_agent": user_agent,
+        })
         assert self.client.get_all_entities() == self.entities
         selected = self.client.get_recent_commands(entity["created"])
-        assert selected == self.expected_join(entity["created"])
+        assert selected == self.recent_rows
         entity = self.client.edit_entity(
             entity["identifier"],
             locale=f"{locale}_new",
         )
         self.entities[-1] = entity
+        self.recent_rows[-1]["locale"] = entity["locale"]
         return entity
 
     def check_command(self, entity, argument, status):
@@ -79,6 +68,7 @@ class RpcStateMachine(RuleBasedStateMachine):
             status=status,
         )
         self.commands.append(command)
+        self.recent_rows[-1]["argument"] = command["argument"]
         assert self.client.get_all_commands() == self.commands
         command = self.client.edit_command(
             command["identifier"],
@@ -120,7 +110,7 @@ class RpcStateMachine(RuleBasedStateMachine):
         command = self.check_command(entity, argument, status)
         self.check_result(command, response, status)
         selected = self.client.get_recent_commands(entity["created"])
-        assert selected == self.expected_join(entity["created"])
+        assert selected == self.recent_rows
 
 
 TestRpc = RpcStateMachine.TestCase
