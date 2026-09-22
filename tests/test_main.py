@@ -28,6 +28,7 @@ class RpcStateMachine(RuleBasedStateMachine):
         self.commands = []
         self.results = []
         self.recent_rows = []
+        self.next_created = 1
         self.server = main.Server(("127.0.0.1", 0), main.RequestHandler)
         self.thread = threading.Thread(
             target=self.server.serve_forever,
@@ -42,8 +43,24 @@ class RpcStateMachine(RuleBasedStateMachine):
         self.server.server_close()
         self.thread.join()
 
+    def get_created(self):
+        created = self.next_created
+        self.next_created += 1
+        return created
+
     def check_entity(self, locale, user_agent):
-        entity = self.client.create_entity(locale, user_agent)
+        entity = {
+            "identifier": len(self.entities),
+            "created": self.get_created(),
+            "locale": locale,
+            "user_agent": user_agent,
+        }
+        actual = self.client.create_entity(
+            locale,
+            user_agent,
+            created=entity["created"],
+        )
+        assert actual == entity
         self.entities.append(entity)
         self.recent_rows.append({
             "argument": None,
@@ -53,43 +70,75 @@ class RpcStateMachine(RuleBasedStateMachine):
         assert self.client.get_all_entities() == self.entities
         selected = self.client.get_recent_commands(entity["created"])
         assert selected == self.recent_rows
-        entity = self.client.edit_entity(
+        entity = {**entity, "locale": f"{locale}_new"}
+        actual = self.client.edit_entity(
             entity["identifier"],
-            locale=f"{locale}_new",
+            locale=entity["locale"],
         )
+        assert actual == entity
         self.entities[-1] = entity
         self.recent_rows[-1]["locale"] = entity["locale"]
+        assert self.client.get_all_entities() == self.entities
         return entity
 
     def check_command(self, entity, argument, status):
-        command = self.client.create_command(
+        command = {
+            "identifier": len(self.commands),
+            "created": self.get_created(),
+            "argument": argument,
+            "entity": entity["identifier"],
+            "tags": None,
+            "status": status,
+            "started": None,
+        }
+        actual = self.client.create_command(
             entity["identifier"],
             argument=argument,
             status=status,
+            created=command["created"],
         )
+        assert actual == command
         self.commands.append(command)
-        self.recent_rows[-1]["argument"] = command["argument"]
+        self.recent_rows[-1]["argument"] = argument
         assert self.client.get_all_commands() == self.commands
-        command = self.client.edit_command(
+        command = {**command, "status": "done"}
+        actual = self.client.edit_command(
             command["identifier"],
-            status="done",
+            status=command["status"],
         )
+        assert actual == command
         self.commands[-1] = command
+        assert self.client.get_all_commands() == self.commands
         return command
 
     def check_result(self, command, response, status):
-        result = self.client.create_result(
+        result = {
+            "identifier": len(self.results),
+            "created": self.get_created(),
+            "response": response,
+            "status": status,
+            "error": None,
+            "command": command["identifier"],
+            "cache_hit": None,
+            "duration": None,
+        }
+        actual = self.client.create_result(
             command["identifier"],
             response=response,
             status=status,
+            created=result["created"],
         )
+        assert actual == result
         self.results.append(result)
         assert self.client.get_all_results() == self.results
-        result = self.client.edit_result(
+        result = {**result, "cache_hit": 1}
+        actual = self.client.edit_result(
             result["identifier"],
-            cache_hit=1,
+            cache_hit=result["cache_hit"],
         )
+        assert actual == result
         self.results[-1] = result
+        assert self.client.get_all_results() == self.results
 
     @rule(
         argument=TEXT,

@@ -117,11 +117,12 @@ def create_result(
     error=None,
     cache_hit=None,
     duration=None,
+    created=None,
 ) -> dict:
     get_by_id(commands, command)
     result = {
         "identifier": get_next_id(results),
-        "created": int(datetime.datetime.now().timestamp()),
+        "created": created or int(datetime.datetime.now().timestamp()),
         "response": response,
         "status": status,
         "error": error,
@@ -360,6 +361,7 @@ class RpcClient:
         error=None,
         cache_hit=None,
         duration=None,
+        created=None,
     ):
         return self.call(6, {
             "command": command,
@@ -368,6 +370,7 @@ class RpcClient:
             "error": error,
             "cache_hit": cache_hit,
             "duration": duration,
+            "created": created,
         })
 
     def get_all_results(self):
