@@ -1,11 +1,20 @@
 import datetime
 import json
+import logging
 import socket
 import socketserver
 import sys
 
 
 RECENT_SECONDS = 6 * 60
+
+logging.basicConfig(
+    filename="errors.log",
+    level=logging.ERROR,
+    encoding="utf-8",
+    format="%(asctime)s %(levelname)s %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 entities = []
 commands = []
@@ -253,6 +262,7 @@ class RequestHandler(socketserver.BaseRequestHandler):
             result = FUNCTIONS[code](**arguments)
             response = {"result": result}
         except (TypeError, ValueError) as error:
+            logger.error("RPC error: %s", error)
             response = {"error": str(error)}
         response_code = code if code < len(FUNCTIONS) else 255
         self.request.sendall(encode_message(response_code, response, 1))

@@ -1,4 +1,5 @@
 .coverage
+errors.log
 .hypothesis/
 .idea/
 .pytest_cache/
