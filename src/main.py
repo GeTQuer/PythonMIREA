@@ -277,7 +277,7 @@ class Server(socketserver.ThreadingTCPServer):
 
 def run_server(host="127.0.0.1", port=8080):
     with Server((host, port), RequestHandler) as server:
-        print(f"RPC server started on {host}:{port}")
+        print(f"RPC server started on {host}, {port}")
         server.serve_forever()
 
 
@@ -353,25 +353,8 @@ class RpcClient:
             "started": started,
         })
 
-    def create_result(
-        self,
-        command,
-        response=None,
-        status=None,
-        error=None,
-        cache_hit=None,
-        duration=None,
-        created=None,
-    ):
-        return self.call(6, {
-            "command": command,
-            "response": response,
-            "status": status,
-            "error": error,
-            "cache_hit": cache_hit,
-            "duration": duration,
-            "created": created,
-        })
+    def create_result(self, command, **fields):
+        return self.call(6, {"command": command, **fields})
 
     def get_all_results(self):
         return self.call(7, {})
