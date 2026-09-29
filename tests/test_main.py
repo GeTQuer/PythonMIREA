@@ -2,6 +2,7 @@ import threading
 
 from hypothesis import settings
 from hypothesis import strategies as st
+from hypothesis.stateful import Bundle
 from hypothesis.stateful import RuleBasedStateMachine
 from hypothesis.stateful import rule
 
@@ -19,6 +20,9 @@ main.print = hide_output
 
 
 class RpcStateMachine(RuleBasedStateMachine):
+    entity_ids = Bundle("entity_ids")
+    command_ids = Bundle("command_ids")
+
     def __init__(self):
         super().__init__()
         main.entities.clear()
@@ -27,7 +31,6 @@ class RpcStateMachine(RuleBasedStateMachine):
         self.entities = []
         self.commands = []
         self.results = []
-        self.recent_rows = []
         self.next_created = 1
         self.server = main.Server(("127.0.0.1", 0), main.RequestHandler)
         self.thread = threading.Thread(
@@ -48,6 +51,30 @@ class RpcStateMachine(RuleBasedStateMachine):
         self.next_created += 1
         return created
 
+    def get_recent_rows(self, now):
+        rows = []
+        for entity in self.entities:
+            if entity["created"] < now - main.RECENT_SECONDS:
+                continue
+            matches = [
+                command for command in self.commands
+                if command["entity"] == entity["identifier"]
+            ]
+            if not matches:
+                rows.append({
+                    "argument": None,
+                    "locale": entity["locale"],
+                    "user_agent": entity["user_agent"],
+                })
+            for command in matches:
+                rows.append({
+                    "argument": command["argument"],
+                    "locale": entity["locale"],
+                    "user_agent": entity["user_agent"],
+                })
+        return rows
+
+    @rule(target=entity_ids, locale=TEXT, user_agent=TEXT)
     def check_entity(self, locale, user_agent):
         entity = {
             "identifier": len(self.entities),
@@ -62,25 +89,20 @@ class RpcStateMachine(RuleBasedStateMachine):
         )
         assert actual == entity
         self.entities.append(entity)
-        self.recent_rows.append({
-            "argument": None,
-            "locale": locale,
-            "user_agent": user_agent,
-        })
         assert self.client.get_all_entities() == self.entities
         selected = self.client.get_recent_commands(entity["created"])
-        assert selected == self.recent_rows
+        assert selected == self.get_recent_rows(entity["created"])
         entity = {**entity, "locale": f"{locale}_new"}
         actual = self.client.edit_entity(
             entity["identifier"],
             locale=entity["locale"],
         )
         assert actual == entity
-        self.entities[-1] = entity
-        self.recent_rows[-1]["locale"] = entity["locale"]
+        self.entities[entity["identifier"]] = entity
         assert self.client.get_all_entities() == self.entities
         return entity
 
+    @rule(target=command_ids, entity=entity_ids, argument=TEXT, status=TEXT)
     def check_command(self, entity, argument, status):
         command = {
             "identifier": len(self.commands),
@@ -99,7 +121,6 @@ class RpcStateMachine(RuleBasedStateMachine):
         )
         assert actual == command
         self.commands.append(command)
-        self.recent_rows[-1]["argument"] = argument
         assert self.client.get_all_commands() == self.commands
         command = {**command, "status": "done"}
         actual = self.client.edit_command(
@@ -111,6 +132,7 @@ class RpcStateMachine(RuleBasedStateMachine):
         assert self.client.get_all_commands() == self.commands
         return command
 
+    @rule(command=command_ids, response=TEXT, status=TEXT)
     def check_result(self, command, response, status):
         result = {
             "identifier": len(self.results),
@@ -140,31 +162,15 @@ class RpcStateMachine(RuleBasedStateMachine):
         self.results[-1] = result
         assert self.client.get_all_results() == self.results
 
-    @rule(
-        argument=TEXT,
-        locale=TEXT,
-        response=TEXT,
-        status=TEXT,
-        user_agent=TEXT,
-    )
-    def check_all_methods(
-        self,
-        argument,
-        locale,
-        response,
-        status,
-        user_agent,
-    ):
-        entity = self.check_entity(locale, user_agent)
-        command = self.check_command(entity, argument, status)
-        self.check_result(command, response, status)
+    @rule(entity=entity_ids)
+    def check_recent_commands(self, entity):
         selected = self.client.get_recent_commands(entity["created"])
-        assert selected == self.recent_rows
+        assert selected == self.get_recent_rows(entity["created"])
 
 
 TestRpc = RpcStateMachine.TestCase
 TestRpc.settings = settings(
     deadline=None,
     max_examples=5,
-    stateful_step_count=2,
+    stateful_step_count=10,
 )
