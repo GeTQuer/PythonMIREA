@@ -7,6 +7,7 @@ from urllib.parse import parse_qsl, urlsplit
 from xml.etree import ElementTree
 
 from src.jobs import Jobs
+from src.sqlite_store import SqliteStore
 from src.storage import FileStore
 from src.xml_api import encode
 
@@ -14,6 +15,7 @@ from src.xml_api import encode
 OK = 200
 UNAUTHORIZED = 401
 BAD_REQUEST = 400
+ROUTE_PARTS = 3
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -39,21 +41,18 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, KeyError, TypeError, IndexError,
                 ElementTree.ParseError) as exc:
             self.respond(BAD_REQUEST, {"error": str(exc)})
+        finally:
+            self.server.store.close()
 
     def dispatch(self, path, fields):
         parts = path.strip("/").split("/")
-        if len(parts) < 3:
+        if len(parts) < ROUTE_PARTS:
             raise ValueError("Неизвестный маршрут")
         prefix, action, table = parts[:3]
         if prefix != "api":
             raise ValueError("Неизвестный маршрут")
         if self.command == "GET" and action == "fetch":
-            if table == "report":
-                return self.server.store.get_report()
-            links = {"command": "entity", "result": "command"}
-            if table in links:
-                fields[links[table]] = parts[3]
-            return self.server.store.fetch(table, fields)
+            return self.fetch(table, parts, fields)
         if self.command != "POST" or table not in ("entity", "command"):
             raise ValueError("Неизвестный маршрут")
         if action == "update":
@@ -62,6 +61,14 @@ class Handler(BaseHTTPRequestHandler):
         if action == "submit":
             return self.submit(table)
         raise ValueError("Неизвестный маршрут")
+
+    def fetch(self, table, parts, fields):
+        if table == "report":
+            return self.server.store.get_report()
+        links = {"command": "entity", "result": "command"}
+        if table in links:
+            fields[links[table]] = parts[3]
+        return self.server.store.fetch(table, fields)
 
     def submit(self, table):
         size = int(self.headers.get("Content-Length", "0"))
@@ -78,7 +85,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/xml; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         if status == UNAUTHORIZED:
-            self.send_header("WWW-Authenticate", 'Basic realm="audio"')
+            self.send_header("WWW-Authenticate",
+                             'Basic realm="audio", charset="UTF-8"')
         self.end_headers()
         self.wfile.write(data)
 
@@ -101,7 +109,8 @@ def main():
     config = configparser.ConfigParser()
     config.read(arguments.config, encoding="utf-8")
     settings = config["api"]
-    store = FileStore(settings["database"])
+    stores = {"file": FileStore, "sqlite": SqliteStore}
+    store = stores[settings.get("backend", "sqlite")](settings["database"])
     server = create_server(settings, store)
     print("HTTP API:", server.server_address)
     try:

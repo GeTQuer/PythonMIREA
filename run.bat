@@ -1,4 +1,13 @@
 @echo off
+if "%1"=="test-sqlite" (
+    set COVERAGE_CORE=pytrace
+    python -m coverage run --branch --source=src.http_api,src.http_client,src.sqlite_store,src.jobs,src.xml_api -m unittest tests.test_sqlite_http -v
+    if errorlevel 1 exit /b 1
+    python -m coverage report -m
+    python -m coverage html -d htmlcov/sqlite
+    python -m pycodestyle src tests
+    exit /b
+)
 if "%1"=="http" (
     python -m src.http_api %2 %3
     exit /b

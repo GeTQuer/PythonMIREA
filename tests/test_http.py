@@ -2,6 +2,7 @@ import tempfile
 import threading
 import time
 import unittest
+from http import HTTPStatus
 from pathlib import Path
 from urllib.error import HTTPError
 
@@ -148,7 +149,7 @@ class HttpMachine(RuleBasedStateMachine):
         client = ApiClient(self.url, password="wrong")
         with unittest.TestCase().assertRaises(HTTPError) as caught:
             client.api_fetch_entity()
-        assert caught.exception.code == 401
+        assert caught.exception.code == HTTPStatus.UNAUTHORIZED
         assert "Basic" in caught.exception.headers["WWW-Authenticate"]
 
     @rule()
@@ -162,10 +163,10 @@ class HttpMachine(RuleBasedStateMachine):
         for method, path, fields in requests:
             with unittest.TestCase().assertRaises(HTTPError) as caught:
                 self.client.call(method, path, fields)
-            assert caught.exception.code == 400
+            assert caught.exception.code == HTTPStatus.BAD_REQUEST
         with unittest.TestCase().assertRaises(HTTPError) as caught:
             self.client.api_submit_command(9999, argument="x")
-        assert caught.exception.code == 400
+        assert caught.exception.code == HTTPStatus.BAD_REQUEST
 
     @rule()
     def check_time_boundary(self):

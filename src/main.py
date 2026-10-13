@@ -167,22 +167,17 @@ def get_recent_commands(now=None) -> list[dict]:
     for entity in entities:
         if entity["created"] < current_time - RECENT_SECONDS:
             continue
-        match_found = False
-        for command in commands:
-            if entity["identifier"] == command["entity"]:
-                selected.append({
-                    "argument": command["argument"],
-                    "locale": entity["locale"],
-                    "user_agent": entity["user_agent"],
-                })
-                match_found = True
-        if not match_found:
-            selected.append({
-                "argument": None,
-                "locale": entity["locale"],
-                "user_agent": entity["user_agent"],
-            })
+        selected.extend(get_entity_rows(entity))
     return selected
+
+
+def get_entity_rows(entity):
+    arguments = [
+        command["argument"] for command in commands
+        if entity["identifier"] == command["entity"]
+    ] or [None]
+    return [{"argument": argument, "locale": entity["locale"],
+             "user_agent": entity["user_agent"]} for argument in arguments]
 
 
 REPL_COMMANDS = {

@@ -42,6 +42,7 @@ class Jobs:
         fields["duration"] = int(time.time()) - started
         self.store.create("result", fields)
         self.store.update("command", identifier, {"status": fields["status"]})
+        self.store.close()
 
     def read_process(self, process):
         if process.returncode:
