@@ -1,4 +1,6 @@
 .coverage
+data/
+htmlcov/
 errors.log
 .hypothesis/
 .idea/
