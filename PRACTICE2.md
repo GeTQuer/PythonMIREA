@@ -13,3 +13,66 @@ FFmpeg берётся из PATH или пакета imageio-ffmpeg.
 и преобразует каждый в OGG. Файлы находятся в data/examples и не
 попадают в Git. Требуется аудиодорожка; видео не переносится в OGG.
 FFmpeg запускается списком аргументов без shell.
+
+## Этап 2
+
+`run.bat http` запускает API на http://127.0.0.1:8081.
+Настройки в config.ini: host, port, username, password, database,
+test_mode. По умолчанию логин и пароль student; замените их для своего
+запуска. Basic-аутентификация требует HTTPS вне локального компьютера.
+При неверных данных авторизации сервер возвращает 401 и
+WWW-Authenticate. Успех: 200, ошибки параметров: 400. Ответы всегда XML.
+
+| Метод | Маршрут | Вход |
+|---|---|---|
+| POST | /api/submit/entity | XML locale, user_agent, created |
+| GET | /api/fetch/entity | Фильтры в query, например identifier |
+| POST | /api/update/entity | identifier и изменяемые поля в query |
+| POST | /api/submit/command | XML entity, argument, tags, status, started |
+| GET | /api/fetch/command/:entity | ID сущности в пути, фильтры в query |
+| POST | /api/update/command | identifier и изменяемые поля в query |
+| GET | /api/fetch/result/:command | ID команды в пути, фильтры в query |
+| GET | /api/fetch/report | Без параметров |
+
+created задаётся в Unix-секундах, по умолчанию текущее время.
+Report: последние 6 минут, включая границу, левое соединение Entity
+с Command; поля argument, locale, user_agent; одинаковые строки убираются.
+При отсутствии команды argument имеет XML-атрибут null="true".
+
+Argument команды — JSON-строка с input и output, путями MP4 и OGG.
+API принимает задачи для локальных файлов сервера. Файлы предварительно
+помещаются на компьютер сервера; отдельного маршрута загрузки в задании нет.
+Выполнение происходит в фоне, одной задачей за раз. Статусы команды:
+queued, running, done, error. Result содержит response (путь OGG), error
+(сообщение), status, cache_hit (0), duration (секунды). started — Unix-время.
+Задачи выполняются через subprocess и утилиту этапа 1, timeout 600 секунд.
+В test_mode=true FFmpeg не запускается, Result содержит status=test,
+response=test mode. Очередь в памяти: незавершённые задачи при остановке
+сервера автоматически не возобновляются.
+
+```python
+import json
+from src.http_client import ApiClient
+
+api = ApiClient("http://127.0.0.1:8081")
+entity = api.api_submit_entity(locale="ru", user_agent="Python")
+command = api.api_submit_command(
+    entity["identifier"],
+    argument=json.dumps({"input": "data/examples/tone_440.mp4",
+                         "output": "data/output.ogg"}),
+)
+print(api.api_fetch_result(command["identifier"]))
+```
+
+Повторяйте fetch_result до появления результата. Клиент возвращает строки
+XML, целые поля при необходимости преобразуются через int.
+Методы ApiClient названы по маршрутам, с заменой / на _.
+Результаты создания и изменения — словарь; поиск и отчёт — список словарей.
+
+`run.bat test-http` запускает только Hypothesis MBT через HTTP-клиент,
+отчёт ветвей Coverage и PEP8. HTML: htmlcov/http/index.html.
+Правила раздельные, поэтому при ошибке выводится цепочка операций.
+initialize гарантирует вызов всех восьми обработчиков даже в коротком
+сценарии. Проверяются неверная авторизация, обновления, связи, XML-символы,
+отчёт, старая сущность, повторное открытие файлового хранилища.
+Хранилище этапа 2 — атомарно заменяемый JSON-файл, операции защищены lock.
