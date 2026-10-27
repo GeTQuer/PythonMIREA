@@ -1,0 +1,56 @@
+.\run.bat audio --demo
+.\run.bat http
+
+
+import json
+from src.http_client import ApiClient
+
+api = ApiClient("http://127.0.0.1:8081")
+entity = api.api_submit_entity(locale="ru", user_agent="Python")
+print(entity)
+
+command = api.api_submit_command(
+    entity["identifier"],
+    argument=json.dumps({
+        "input": "data/examples/tone_440.mp4",
+        "output": "data/http_result.ogg",
+    }),
+)
+print(command)
+
+print(api.api_fetch_result(command["identifier"]))
+
+-----------------------------
+
+import json
+from src.http_client import ApiClient
+
+api = ApiClient("http://127.0.0.1:8081")
+entity = api.api_submit_entity(locale="ru", user_agent="SQLite demo")
+
+command = api.api_submit_command(
+    entity["identifier"],
+    argument=json.dumps({
+        "input": "data/examples/tone_440.mp4",
+        "output": "data/sqlite_result.ogg",
+    }),
+)
+
+print("Entity:", entity["identifier"])
+print("Command:", command["identifier"])
+
+
+print(api.api_fetch_result(command["identifier"]))
+
+
+
+Другой терминал
+
+print(api.api_fetch_entity(identifier=entity["identifier"]))
+print(api.api_fetch_command(entity["identifier"]))
+print(api.api_fetch_result(command["identifier"]))
+
+exit()
+
+.\run.bat test-sqlite
+Start-Process .\htmlcov\sqlite\index.html

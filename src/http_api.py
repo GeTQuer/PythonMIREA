@@ -17,16 +17,22 @@ BAD_REQUEST = 400
 
 
 class Handler(BaseHTTPRequestHandler):
+    """Принимать HTTP-запросы и возвращать XML-ответы."""
+
     def do_GET(self):
+        """Передать GET-запрос общему обработчику."""
         self.handle_api()
 
     def do_POST(self):
+        """Передать POST-запрос общему обработчику."""
         self.handle_api()
 
     def log_message(self, format, *args):
+        """Отключить стандартный вывод запросов в консоль."""
         pass
 
     def handle_api(self):
+        """Проверить авторизацию, обработать запрос и отправить ответ."""
         authorization = self.headers.get("Authorization", "")
         if not hmac.compare_digest(authorization, self.server.authorization):
             self.respond(UNAUTHORIZED, {"error": "Unauthorized"})
@@ -41,6 +47,7 @@ class Handler(BaseHTTPRequestHandler):
             self.respond(BAD_REQUEST, {"error": str(exc)})
 
     def dispatch(self, path, fields):
+        """Выбрать операцию по методу и маршруту запроса."""
         parts = path.strip("/").split("/")
         if len(parts) < 3:
             raise ValueError("Неизвестный маршрут")
@@ -64,6 +71,7 @@ class Handler(BaseHTTPRequestHandler):
         raise ValueError("Неизвестный маршрут")
 
     def submit(self, table):
+        """Прочитать XML, создать запись и запустить команду в фоне."""
         size = int(self.headers.get("Content-Length", "0"))
         root = ElementTree.fromstring(self.rfile.read(size))
         fields = {item.tag: item.text or "" for item in root}
@@ -73,6 +81,7 @@ class Handler(BaseHTTPRequestHandler):
         return record
 
     def respond(self, status, value):
+        """Отправить HTTP-статус и XML с результатом или ошибкой."""
         data = encode(value)
         self.send_response(status)
         self.send_header("Content-Type", "application/xml; charset=utf-8")
@@ -84,9 +93,10 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def create_server(settings, store):
+    """Создать HTTP-сервер, настроить авторизацию и очередь задач."""
     server = ThreadingHTTPServer((settings["host"], int(settings["port"])),
                                  Handler)
-    credentials = f"{settings['username']}:{settings['password']}"
+    credentials = ":".join((settings["username"], settings["password"]))
     token = base64.b64encode(credentials.encode("utf-8")).decode("ascii")
     server.authorization = f"Basic {token}"
     server.store = store
@@ -95,6 +105,7 @@ def create_server(settings, store):
 
 
 def main():
+    """Прочитать конфигурацию и запустить HTTP-сервер."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config.ini")
     arguments = parser.parse_args()

@@ -2,6 +2,7 @@ from xml.etree import ElementTree
 
 
 def encode(value):
+    """Преобразовать записи сервера в XML-ответ."""
     root = ElementTree.Element("response")
     records = value if isinstance(value, list) else [value]
     for record in records:
@@ -16,6 +17,7 @@ def encode(value):
 
 
 def decode(data):
+    """Прочитать XML-ответ и вернуть список словарей."""
     root = ElementTree.fromstring(data)
     return [
         {field.tag: None if field.get("null") else field.text or ""
@@ -25,6 +27,7 @@ def decode(data):
 
 
 def request_body(fields):
+    """Преобразовать поля запроса в XML-тело."""
     root = ElementTree.Element("request")
     for name, value in fields.items():
         ElementTree.SubElement(root, name).text = str(value)
