@@ -7,12 +7,16 @@ from pathlib import Path
 
 
 class Jobs:
+    """Выполнять команды преобразования в фоновом потоке."""
+
     def __init__(self, store, test_mode):
+        """Сохранить хранилище и создать очередь с одним работником."""
         self.store = store
         self.test_mode = test_mode
         self.pool = ThreadPoolExecutor(max_workers=1)
 
     def submit(self, command):
+        """Поставить задачу в очередь или создать тестовый результат."""
         if self.test_mode:
             self.store.create("result", {
                 "command": command["identifier"], "status": "test",
@@ -22,6 +26,7 @@ class Jobs:
         self.pool.submit(self.execute, command)
 
     def execute(self, command):
+        """Запустить утилиту, сохранить результат и изменить статус."""
         started = int(time.time())
         identifier = command["identifier"]
         self.store.update("command", identifier,
@@ -45,9 +50,11 @@ class Jobs:
         self.store.close()
 
     def read_process(self, process):
+        """Получить путь результата или сообщение об ошибке процесса."""
         if process.returncode:
             return {"status": "error", "error": process.stderr.strip()}
         return {"response": process.stdout.strip()}
 
     def close(self):
+        """Дождаться завершения задач и закрыть очередь."""
         self.pool.shutdown(wait=True)

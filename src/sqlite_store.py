@@ -9,7 +9,9 @@ from src.storage import DEFAULTS, normalize, report
 
 
 def define_entity(database):
+    """Описать таблицу сущностей и связь с командами."""
     class Participant(database.Entity):
+        """Хранить данные сущности и связанные команды."""
         _table_ = "Entity"
         identifier = PrimaryKey(int)
         created = Required(int)
@@ -20,7 +22,9 @@ def define_entity(database):
 
 
 def define_command(database):
+    """Описать таблицу команд и её связи."""
     class Command(database.Entity):
+        """Хранить задачу преобразования и её результаты."""
         identifier = PrimaryKey(int)
         created = Required(int)
         argument = Optional(str, default="", autostrip=False)
@@ -33,7 +37,9 @@ def define_command(database):
 
 
 def define_result(database):
+    """Описать таблицу результатов и связь с командой."""
     class Result(database.Entity):
+        """Хранить результат выполнения команды."""
         identifier = PrimaryKey(int)
         created = Required(int)
         response = Optional(str, default="", autostrip=False)
@@ -46,7 +52,10 @@ def define_result(database):
 
 
 class SqliteStore:
+    """Хранить сущности, команды и результаты в SQLite через PonyORM."""
+
     def __init__(self, path):
+        """Подключить SQLite и создать отображение классов на таблицы."""
         self.lock = threading.RLock()
         path = Path(path).resolve()
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -61,6 +70,7 @@ class SqliteStore:
         self.database.generate_mapping(create_tables=True)
 
     def serialize(self, table, record):
+        """Преобразовать ORM-объект и его связи в словарь."""
         row = {name: getattr(record, name) for name in DEFAULTS[table]}
         for name in ("entity", "command"):
             if name in row:
@@ -69,6 +79,7 @@ class SqliteStore:
                 "created": record.created, **row}
 
     def fetch(self, table, fields=None):
+        """Получить записи таблицы и отфильтровать по полям."""
         with self.lock, db_session:
             entity = self.tables[table]
             rows = [self.serialize(table, record)
@@ -78,6 +89,7 @@ class SqliteStore:
                            for key, value in (fields or {}).items())]
 
     def prepare(self, table, fields):
+        """Проверить поля и найти объекты для связей между таблицами."""
         fields = normalize(table, fields)
         links = {"command": "entity", "result": "command"}
         name = links.get(table)
@@ -89,6 +101,7 @@ class SqliteStore:
         return fields
 
     def create(self, table, fields):
+        """Создать запись в транзакции SQLite и вернуть её данные."""
         with self.lock, db_session:
             defaults = {**DEFAULTS[table], "created": int(time.time())}
             values = self.prepare(table, {**defaults, **fields})
@@ -98,6 +111,7 @@ class SqliteStore:
             return self.serialize(table, record)
 
     def update(self, table, identifier, fields):
+        """Изменить запись по идентификатору в транзакции SQLite."""
         with self.lock, db_session:
             entity = self.tables[table]
             record = entity.get(identifier=int(identifier))
@@ -107,9 +121,11 @@ class SqliteStore:
             return self.serialize(table, record)
 
     def get_report(self):
+        """Построить отчёт по сущностям и командам из SQLite."""
         with self.lock, db_session:
             return report(self.fetch("entity"), self.fetch("command"),
                           int(time.time()))
 
     def close(self):
+        """Закрыть соединение SQLite текущего потока."""
         self.database.disconnect()

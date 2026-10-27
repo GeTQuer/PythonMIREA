@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 def get_ffmpeg():
+    """Найти FFmpeg в PATH или в пакете imageio-ffmpeg."""
     executable = shutil.which("ffmpeg")
     if executable:
         return executable
@@ -13,6 +14,7 @@ def get_ffmpeg():
 
 
 def extract_audio(source, destination):
+    """Проверить пути и извлечь звук из MP4 в OGG с помощью FFmpeg."""
     source = Path(source).resolve()
     destination = Path(destination).resolve()
     if source.suffix.lower() != ".mp4" or not source.is_file():
@@ -30,13 +32,15 @@ def extract_audio(source, destination):
 
 
 def demonstrate():
+    """Создать три примера MP4 и преобразовать их в OGG."""
     directory = Path("data/examples")
     directory.mkdir(parents=True, exist_ok=True)
     for frequency in (220, 440, 880):
         source = directory / f"tone_{frequency}.mp4"
         subprocess.run(
             [get_ffmpeg(), "-y", "-v", "error", "-f", "lavfi", "-i",
-             f"sine=frequency={frequency}:duration=1", "-c:a", "aac",
+             "sine=frequency=" + str(frequency) + ":duration=1",
+             "-c:a", "aac",
              str(source)],
             check=True,
         )
@@ -44,6 +48,7 @@ def demonstrate():
 
 
 def main():
+    """Разобрать аргументы и запустить преобразование или демонстрацию."""
     parser = argparse.ArgumentParser(description="Извлечение MP4 в OGG")
     parser.add_argument("source", nargs="?")
     parser.add_argument("destination", nargs="?")

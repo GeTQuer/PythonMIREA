@@ -19,6 +19,7 @@ DEFAULTS = {
 
 
 def normalize(table, fields):
+    """Проверить имена полей и привести значения к ожидаемым типам."""
     defaults = {**DEFAULTS[table], "created": int(time.time())}
     unknown = fields.keys() - defaults.keys()
     if unknown:
@@ -30,6 +31,7 @@ def normalize(table, fields):
 
 
 def report(entities, commands, now):
+    """Сформировать отчёт по недавним сущностям и их командам."""
     rows = []
     for entity in entities:
         if entity["created"] < now - RECENT_SECONDS:
@@ -47,7 +49,10 @@ def report(entities, commands, now):
 
 
 class FileStore:
+    """Хранить сущности, команды и результаты в JSON-файле."""
+
     def __init__(self, path):
+        """Создать хранилище или загрузить существующий файл."""
         self.path = Path(path)
         self.lock = threading.RLock()
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -56,17 +61,20 @@ class FileStore:
             self.tables = json.loads(self.path.read_text(encoding="utf-8"))
 
     def save(self):
+        """Записать таблицы во временный файл и заменить основной."""
         temporary = self.path.with_suffix(".tmp")
         temporary.write_text(json.dumps(self.tables), encoding="utf-8")
         temporary.replace(self.path)
 
     def fetch(self, table, fields=None):
+        """Найти записи таблицы по указанным полям."""
         with self.lock:
             return [dict(row) for row in self.tables[table]
                     if all(str(row[key]) == str(value)
                            for key, value in (fields or {}).items())]
 
     def create(self, table, fields):
+        """Проверить и сохранить новую запись таблицы."""
         with self.lock:
             fields = normalize(table, fields)
             self.validate_link(table, fields)
@@ -77,6 +85,7 @@ class FileStore:
             return dict(row)
 
     def validate_link(self, table, fields):
+        """Проверить существование связанной сущности или команды."""
         links = {"command": "entity", "result": "command"}
         link = links.get(table)
         if link and link in fields:
@@ -84,6 +93,7 @@ class FileStore:
                 raise ValueError("Связанная запись не найдена")
 
     def update(self, table, identifier, fields):
+        """Изменить запись по идентификатору и сохранить данные."""
         with self.lock:
             fields = normalize(table, fields)
             self.validate_link(table, fields)
@@ -96,9 +106,11 @@ class FileStore:
             return dict(row)
 
     def get_report(self):
+        """Получить данные из хранилища и построить отчёт."""
         with self.lock:
             return report(self.fetch("entity"), self.fetch("command"),
                           int(time.time()))
 
     def close(self):
+        """Завершить работу с хранилищем без постоянного соединения."""
         pass

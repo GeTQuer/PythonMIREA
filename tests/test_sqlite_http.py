@@ -5,6 +5,8 @@ from tests import test_http
 
 
 class SqliteMachine(test_http.HttpMachine):
+    """Проверять HTTP API теми же правилами на хранилище SQLite."""
+
     store_class = SqliteStore
     suffix = ".sqlite"
 
